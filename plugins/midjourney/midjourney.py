@@ -23,7 +23,7 @@ import threading
 @plugins.register(
     name="Midjourney",
     desire_priority=-1,
-    hidden=True,
+    hidden=False,
     desc="AI drawing plugin of midjourney",
     version="1.0",
     author="littercoder",

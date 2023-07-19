@@ -105,8 +105,8 @@ available_setting = {
     "use_linkai": False,
     "linkai_api_key": "",
     "linkai_app_code": "",
-    "proxy_server": "", # mj代理地址
-    "proxy_api_secret": "" # mj api密钥
+    "proxy_server": "",  # mj代理地址
+    "proxy_api_secret": ""  # mj api密钥
 }
 
 
