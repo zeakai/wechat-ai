@@ -33,7 +33,7 @@ class Midjourney(Plugin):
         super().__init__()
         self.handlers[Event.ON_HANDLE_CONTEXT] = self.on_handle_context
         self.proxy_server = conf().get("proxy_server")
-        self.proxy_server = conf().get("proxy_api_secret")
+        self.proxy_api_secret = conf().get("proxy_api_secret")
         self.channel = WechatChannel()
         self.task_id_dict = ExpiredDict(60 * 60)
         self.cmd_dict = ExpiredDict(60 * 60)
@@ -139,16 +139,6 @@ class Midjourney(Plugin):
         return requests.get(url=self.proxy_server + '/task/%s/fetch' % task_id,
                              headers={'mj-api-secret': self.proxy_api_secret}).json()
 
-    def get_help_text(self, **kwargs):
-        help_text = "这是一个能调用midjourney实现ai绘图的扩展能力。\n"
-        help_text += "使用说明: \n"
-        help_text += "/imagine 根据给出的提示词绘画;\n"
-        help_text += "/img2img 根据提示词+垫图生成图;\n"
-        help_text += "/up 任务ID 序号执行动作;\n"
-        help_text += "/describe 图片转文字;\n"
-        help_text += "/shorten 提示词分析;"
-        return help_text
-
     def add_task(self, task_id):
         self.task_id_dict[task_id] = 'NOT_START'
 
@@ -170,30 +160,32 @@ class Midjourney(Plugin):
             else:
                 reply_prefix = ''
             if status == 'SUCCESS':
+                logger.debug("[Midjourney] 任务已完成: " + task_id)
                 self.task_id_dict.pop(task_id)
                 if action == 'DESCRIBE' or action == 'SHORTEN':
                     prompt = task['properties']['finalPrompt']
                     reply = Reply(ReplyType.TEXT, (reply_prefix + '✅ 任务已完成\n📨 任务ID: %s\n%s\n\n' + self.get_buttons(task) + '\n' + '💡 使用 /up 任务ID 序号执行动作\n🔖 /up %s 1') % (
                                      task_id, prompt, task_id))
+                    self.channel.send(reply, context)
                 else:
-                    url_reply = Reply(ReplyType.IMAGE_URL, task['imageUrl'])
-                    self.channel.send(url_reply, context)
                     reply = Reply(ReplyType.TEXT,
                                   ('✅ 任务已完成\n📨 任务ID: %s\n✨ %s\n\n' + self.get_buttons(
                                       task) + '\n' + '💡 使用 /up 任务ID 序号执行动作\n🔖 /up %s 1') % (
                                         task_id, description, task_id))
-                self.channel.send(reply, context)
+                    self.channel.send(reply, context)
+                    url_reply = Reply(ReplyType.IMAGE_URL, task['imageUrl'])
+                    self.channel.send(url_reply, context)
             elif status == 'MODAL':
                 res = self.post_json('/submit/modal', {'taskId': task_id})
                 if res.get("code") != 1:
                     self.task_id_dict.pop(task_id)
                     reply = Reply(ReplyType.TEXT,
-                              reply_prefix + '❌ 任务执行失败\n✨ %s\n📨 任务ID: %s\n📒 失败原因: %s' % (task_id, res.get("description")))
+                              reply_prefix + '❌ 任务执行失败\n✨ %s\n📨 任务ID: %s\n📒 失败原因: %s' % (description, task_id, res.get("description")))
                     self.channel.send(reply, context)
             elif status == 'FAILURE':
                 self.task_id_dict.pop(task_id)
                 reply = Reply(ReplyType.TEXT,
-                              reply_prefix + '❌ 任务执行失败\n✨ %s\n📨 任务ID: %s\n📒 失败原因: %s' % (description, task['failReason']))
+                              reply_prefix + '❌ 任务执行失败\n✨ %s\n📨 任务ID: %s\n📒 失败原因: %s' % (description, task_id, task['failReason']))
                 self.channel.send(reply, context)
 
     def image_file_to_base64(self, file_path):
@@ -213,3 +205,15 @@ class Midjourney(Plugin):
             res += ' %d- %s\n' % (index, name)
             index += 1
         return res
+
+    def get_help_text(self, verbose=False, **kwargs):
+        help_text = "这是一个能调用midjourney实现ai绘图的扩展能力。\n"
+        if not verbose:
+            return help_text
+        help_text += "使用说明: \n"
+        help_text += "/imagine 根据给出的提示词绘画;\n"
+        help_text += "/img2img 根据提示词+垫图生成图;\n"
+        help_text += "/up 任务ID 序号执行动作;\n"
+        help_text += "/describe 图片转文字;\n"
+        help_text += "/shorten 提示词分析;\n"
+        return help_text
