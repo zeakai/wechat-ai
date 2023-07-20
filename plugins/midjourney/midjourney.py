@@ -172,9 +172,9 @@ class Midjourney(Plugin):
                                   ('✅ 任务已完成\n📨 任务ID: %s\n✨ %s\n\n' + self.get_buttons(
                                       task) + '\n' + '💡 使用 /up 任务ID 序号执行动作\n🔖 /up %s 1') % (
                                         task_id, description, task_id))
-                    self.channel.send(reply, context)
                     url_reply = Reply(ReplyType.IMAGE_URL, task['imageUrl'])
                     self.channel.send(url_reply, context)
+                    self.channel.send(reply, context)
             elif status == 'MODAL':
                 res = self.post_json('/submit/modal', {'taskId': task_id})
                 if res.get("code") != 1:
