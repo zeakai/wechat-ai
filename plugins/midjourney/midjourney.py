@@ -13,7 +13,6 @@ from config import conf
 from plugins import *
 import base64
 import os
-import json
 import requests
 import schedule
 import time
@@ -62,18 +61,27 @@ class Midjourney(Plugin):
                 result = self.handle_imagine(content[9:], state)
             elif content.startswith("/up "):
                 arr = content[4:].split()
-                task_id = arr[0]
-                index = int(arr[1])
+                try:
+                    task_id = arr[0]
+                    index = int(arr[1])
+                except Exception as e:
+                    e_context["reply"] = Reply(ReplyType.TEXT, '❌ 您的任务提交失败\nℹ️ 参数错误')
+                    e_context.action = EventAction.BREAK_PASS
+                    return
                 # 获取任务
                 task = self.get_task(task_id)
                 if task is None:
-                    e_context["reply"] = Reply(ReplyType.TEXT, '任务ID不存在')
+                    e_context["reply"] = Reply(ReplyType.TEXT, '❌ 您的任务提交失败\nℹ️ 任务ID不存在')
+                    e_context.action = EventAction.BREAK_PASS
+                    return
+                if index > len(task['buttons']):
+                    e_context["reply"] = Reply(ReplyType.TEXT, '❌ 您的任务提交失败\nℹ️ 按钮序号不正确')
                     e_context.action = EventAction.BREAK_PASS
                     return
                 # 获取按钮
                 button = task['buttons'][index - 1]
-                if button is None:
-                    e_context["reply"] = Reply(ReplyType.TEXT, '按钮序号不正确')
+                if button['label'] == 'Custom Zoom':
+                    e_context["reply"] = Reply(ReplyType.TEXT, '❌ 您的任务提交失败\nℹ️ 暂不支持自定义变焦')
                     e_context.action = EventAction.BREAK_PASS
                     return
                 result = self.post_json('/submit/action', {'customId': button['customId'], 'taskId': task_id, 'state': state})
