@@ -1,4 +1,5 @@
 # encoding:utf-8
+import threading
 
 import plugins
 from bridge.context import ContextType, Context
@@ -9,14 +10,14 @@ from channel.wechat.wechat_channel import WechatChannel
 from common.log import logger
 from common.expired_dict import ExpiredDict
 from config import conf
+from PIL import Image
+from apscheduler.schedulers.blocking import BlockingScheduler
 
 from plugins import *
 import base64
 import os
+import io
 import requests
-import schedule
-import time
-import threading
 
 
 @plugins.register(
@@ -25,7 +26,7 @@ import threading
     hidden=False,
     desc="AI drawing plugin of midjourney",
     version="1.0",
-    author="littercoder",
+    author="litter-coder",
 )
 class Midjourney(Plugin):
     def __init__(self):
@@ -36,15 +37,12 @@ class Midjourney(Plugin):
         self.channel = WechatChannel()
         self.task_id_dict = ExpiredDict(60 * 60)
         self.cmd_dict = ExpiredDict(60 * 60)
-        schedule.every(10).seconds.do(self.query_task_result)
-        t = threading.Thread(target=self.run_task_polling)
-        t.start()
+        scheduler = BlockingScheduler()
+        scheduler.add_job(self.query_task_result, 'interval', seconds=10)
+        # 创建并启动一个新的线程来运行调度器
+        thread = threading.Thread(target=scheduler.start)
+        thread.start()
         logger.info("[Midjourney] inited")
-
-    def run_task_polling(self):
-        while True:
-            schedule.run_pending()
-            time.sleep(1)
 
     def on_handle_context(self, e_context: EventContext):
         if e_context["context"].type not in [ContextType.TEXT, ContextType.IMAGE]:
@@ -84,7 +82,8 @@ class Midjourney(Plugin):
                     e_context["reply"] = Reply(ReplyType.TEXT, '❌ 您的任务提交失败\nℹ️ 暂不支持自定义变焦')
                     e_context.action = EventAction.BREAK_PASS
                     return
-                result = self.post_json('/submit/action', {'customId': button['customId'], 'taskId': task_id, 'state': state})
+                result = self.post_json('/submit/action',
+                                        {'customId': button['customId'], 'taskId': task_id, 'state': state})
             elif content.startswith("/img2img "):
                 self.cmd_dict[msg.actual_user_id] = content
                 e_context["reply"] = Reply(ReplyType.TEXT, '请给我发一张图片作为垫图')
@@ -118,7 +117,8 @@ class Midjourney(Plugin):
         if code == 1:
             task_id = result.get("result")
             self.add_task(task_id)
-            e_context["reply"] = Reply(ReplyType.TEXT, '✅ 您的任务已提交\n🚀 正在快速处理中，请稍后\n📨 任务ID: '+ task_id)
+            e_context["reply"] = Reply(ReplyType.TEXT,
+                                       '✅ 您的任务已提交\n🚀 正在快速处理中，请稍后\n📨 任务ID: ' + task_id)
         elif code == 22:
             self.add_task(result.get("result"))
             e_context["reply"] = Reply(ReplyType.TEXT, '✅ 您的任务已提交\n⏰ ' + result.get("description"))
@@ -132,7 +132,7 @@ class Midjourney(Plugin):
     def handle_describe(self, img_data, state):
         base64_str = self.image_file_to_base64(img_data)
         return self.post_json('/submit/describe', {'base64': base64_str, 'state': state})
-    
+
     def handle_shorten(self, prompt, state):
         return self.post_json('/submit/shorten', {'prompt': prompt, 'state': state})
 
@@ -143,15 +143,17 @@ class Midjourney(Plugin):
     def post_json(self, api_path, data):
         return requests.post(url=self.proxy_server + api_path, json=data,
                              headers={'mj-api-secret': self.proxy_api_secret}).json()
+
     def get_task(self, task_id):
         return requests.get(url=self.proxy_server + '/task/%s/fetch' % task_id,
-                             headers={'mj-api-secret': self.proxy_api_secret}).json()
+                            headers={'mj-api-secret': self.proxy_api_secret}).json()
 
     def add_task(self, task_id):
         self.task_id_dict[task_id] = 'NOT_START'
 
     def query_task_result(self):
         task_ids = list(self.task_id_dict.keys())
+        logger.info("[Midjourney] handle task , size [%s]", len(task_ids))
         if len(task_ids) == 0:
             return
         tasks = self.post_json('/task/list-by-condition', {'ids': task_ids})
@@ -172,15 +174,26 @@ class Midjourney(Plugin):
                 self.task_id_dict.pop(task_id)
                 if action == 'DESCRIBE' or action == 'SHORTEN':
                     prompt = task['properties']['finalPrompt']
-                    reply = Reply(ReplyType.TEXT, (reply_prefix + '✅ 任务已完成\n📨 任务ID: %s\n%s\n\n' + self.get_buttons(task) + '\n' + '💡 使用 /up 任务ID 序号执行动作\n🔖 /up %s 1') % (
-                                     task_id, prompt, task_id))
+                    reply = Reply(ReplyType.TEXT, (
+                                reply_prefix + '✅ 任务已完成\n📨 任务ID: %s\n%s\n\n' + self.get_buttons(
+                            task) + '\n' + '💡 使用 /up 任务ID 序号执行动作\n🔖 /up %s 1') % (
+                                      task_id, prompt, task_id))
+                    self.channel.send(reply, context)
+                elif action == 'UPSCALE':
+                    reply = Reply(ReplyType.TEXT,
+                                  ('✅ 任务已完成\n📨 任务ID: %s\n✨ %s\n\n' + self.get_buttons(
+                                      task) + '\n' + '💡 使用 /up 任务ID 序号执行动作\n🔖 /up %s 1') % (
+                                      task_id, description, task_id))
+                    url_reply = Reply(ReplyType.IMAGE_URL, task['imageUrl'])
+                    self.channel.send(url_reply, context)
                     self.channel.send(reply, context)
                 else:
                     reply = Reply(ReplyType.TEXT,
                                   ('✅ 任务已完成\n📨 任务ID: %s\n✨ %s\n\n' + self.get_buttons(
                                       task) + '\n' + '💡 使用 /up 任务ID 序号执行动作\n🔖 /up %s 1') % (
-                                        task_id, description, task_id))
-                    url_reply = Reply(ReplyType.IMAGE_URL, task['imageUrl'])
+                                      task_id, description, task_id))
+                    image_storage = self.download_and_compress_image(task['imageUrl'])
+                    url_reply = Reply(ReplyType.IMAGE, image_storage)
                     self.channel.send(url_reply, context)
                     self.channel.send(reply, context)
             elif status == 'MODAL':
@@ -188,12 +201,14 @@ class Midjourney(Plugin):
                 if res.get("code") != 1:
                     self.task_id_dict.pop(task_id)
                     reply = Reply(ReplyType.TEXT,
-                              reply_prefix + '❌ 任务执行失败\n✨ %s\n📨 任务ID: %s\n📒 失败原因: %s' % (description, task_id, res.get("description")))
+                                  reply_prefix + '❌ 任务执行失败\n✨ %s\n📨 任务ID: %s\n📒 失败原因: %s' % (
+                                  description, task_id, res.get("description")))
                     self.channel.send(reply, context)
             elif status == 'FAILURE':
                 self.task_id_dict.pop(task_id)
                 reply = Reply(ReplyType.TEXT,
-                              reply_prefix + '❌ 任务执行失败\n✨ %s\n📨 任务ID: %s\n📒 失败原因: %s' % (description, task_id, task['failReason']))
+                              reply_prefix + '❌ 任务执行失败\n✨ %s\n📨 任务ID: %s\n📒 失败原因: %s' % (
+                              description, task_id, task['failReason']))
                 self.channel.send(reply, context)
 
     def image_file_to_base64(self, file_path):
@@ -213,6 +228,22 @@ class Midjourney(Plugin):
             res += ' %d- %s\n' % (index, name)
             index += 1
         return res
+
+    def download_and_compress_image(self, img_url, max_size=(800, 800)):  # 下载并压缩图片
+        # 下载图片
+        pic_res = requests.get(img_url, stream=True)
+        image_storage = io.BytesIO()
+        for block in pic_res.iter_content(1024):
+            image_storage.write(block)
+        image_storage.seek(0)
+
+        # 压缩图片
+        initial_image = Image.open(image_storage)
+        initial_image.thumbnail(max_size)
+        output = io.BytesIO()
+        initial_image.save(output, format=initial_image.format)
+        output.seek(0)
+        return output
 
     def get_help_text(self, verbose=False, **kwargs):
         help_text = "这是一个能调用midjourney实现ai绘图的扩展能力。\n"

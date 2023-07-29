@@ -190,19 +190,11 @@ class WechatChannel(ChatChannel):
             logger.info("[WX] sendFile={}, receiver={}".format(reply.content, receiver))
         elif reply.type == ReplyType.IMAGE_URL:  # 从网络下载图片
             img_url = reply.content
-            # Determine the image format from the URL
-            image_format = img_url.split('.')[-1]
-
             pic_res = requests.get(img_url, stream=True)
             image_storage = io.BytesIO()
             for block in pic_res.iter_content(1024):
                 image_storage.write(block)
             image_storage.seek(0)
-
-            # Convert the image to PNG if it is in webp format
-            if image_format.lower() == 'webp':
-                image_storage = self.convert_image_to_png(image_storage)
-
             itchat.send_image(image_storage, toUserName=receiver)
             logger.info("[WX] sendImage url={}, receiver={}".format(img_url, receiver))
         elif reply.type == ReplyType.IMAGE:  # 从文件读取图片
@@ -210,10 +202,3 @@ class WechatChannel(ChatChannel):
             image_storage.seek(0)
             itchat.send_image(image_storage, toUserName=receiver)
             logger.info("[WX] sendImage, receiver={}".format(receiver))
-
-    def convert_image_to_png(self, image_content):
-        initial_image = Image.open(image_content)
-        output = io.BytesIO()
-        initial_image.save(output, format='PNG')
-        output.seek(0)
-        return output
