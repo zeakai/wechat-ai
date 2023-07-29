@@ -8,6 +8,7 @@
 - [x] 支持MJ的Zoom(图片变焦)、Pan(焦点移动) 等功能
 - [x] 支持MJ的Describe(图生文) 指令和相关动作
 - [x] 支持MJ的Shorten 指令和相关动作
+- [x] 支持MJ的图片压缩发送
 
 # 后续计划
 
@@ -54,7 +55,7 @@ cd wechat-ai/
 **(2) 安装核心依赖 ：**
 
 ```bash
-pip3 install -r requirements-optional.txt
+pip3 install -r requirements.txt
 ```
 
 ## 2.配置
@@ -70,24 +71,24 @@ pip3 install -r requirements-optional.txt
 ```shell
 # config.json文件内容示例
 {
-  "open_ai_api_key": "YOUR API KEY",          # 填入OpenAI API KEY
-  "model": "gpt-3.5-turbo",                   # 模型名称
-  "proxy": "",                                # 模型名称(海外服务器不需要填写)
-  "single_chat_prefix": [""],                 # 私聊时文本需要包含该前缀才能触发机器人回复（为空则表示私聊都会触发）
-  "single_chat_reply_prefix": "",             # 私聊时自动回复的前缀，用于区分真人（为空则表示不加前缀）
-  "group_chat_prefix": ["@gpt"],              # 群聊时包含该前缀则会触发机器人回复
-  "group_name_white_list": ["ALL_GROUP"],     # 开启自动回复的群名称列表（ALL_GROUP为所有群）
-  "group_chat_in_one_session": ["ALL_GROUP"], # 支持会话上下文共享的群名称ALL_GROUP为所有群）  
-  "image_create_prefix": [                    # 开启图片回复的前缀
+  "open_ai_api_key": "YOUR API KEY",            # 填入OpenAI API KEY
+  "model": "gpt-3.5-turbo",                     # 模型名称
+  "proxy": "",                                  # 模型名称(海外服务器不需要填写)
+  "single_chat_prefix": [""],                   # 私聊时文本需要包含该前缀才能触发机器人回复（为空则表示私聊都会触发）
+  "single_chat_reply_prefix": "",               # 私聊时自动回复的前缀，用于区分真人（为空则表示不加前缀）
+  "group_chat_prefix": ["@gpt"],                # 群聊时包含该前缀则会触发机器人回复
+  "group_name_white_list": ["ALL_GROUP"],       # 开启自动回复的群名称列表（ALL_GROUP为所有群）
+  "group_chat_in_one_session": ["ALL_GROUP"],   # 支持会话上下文共享的群名称ALL_GROUP为所有群）  
+  "image_create_prefix": [                      # 开启图片回复的前缀
     "画",
     "看",
     "找"
   ],
-  "conversation_max_tokens": 1000,            # 开启图片回复的前缀
+  "conversation_max_tokens": 1000,              # 开启图片回复的前缀
   "character_desc": "你是Piety Ai, 一个由LitterCoder训练的大型语言模型, 你旨在回答并解决人们的任何问题，并且可以使用多种语言与人交流。",
-  "hot_reload": true,                         # 重启免登录配置
-  "proxy_server": "http://127.0.0.1:8080/mj", # mj代理server配置
-  "proxy_api_secret": ""                      # mj代理api密钥配置（没有可不配）
+  "hot_reload": true,                           # 重启免登录配置
+  "proxy_server": "http://127.0.0.1:8080/mj",   # mj代理server配置
+  "proxy_api_secret": ""                        # mj代理api密钥配置（没有可不配）
 }
 ```
 
