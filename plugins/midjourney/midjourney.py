@@ -84,6 +84,9 @@ class Midjourney(Plugin):
                     return
                 result = self.post_json('/submit/action',
                                         {'customId': button['customId'], 'taskId': task_id, 'state': state})
+                if result.get("code") == 21:
+                    result = self.post_json('/submit/modal',
+                                        {'taskId': result.get("result"), 'state': state})
             elif content.startswith("/img2img "):
                 self.cmd_dict[msg.actual_user_id] = content
                 e_context["reply"] = Reply(ReplyType.TEXT, '请给我发一张图片作为垫图')
@@ -96,6 +99,15 @@ class Midjourney(Plugin):
                 return
             elif content.startswith("/shorten "):
                 result = self.handle_shorten(content[9:], state)
+            elif content.startswith("/seed "):
+                result = self.get_task_image_seed(content[6:])
+                if result.get("code") == 1:
+                    e_context["reply"] = Reply(ReplyType.TEXT, '✅ 获取任务图片seed成功\n📨 任务ID: %s\n🔖 seed值: ' % (
+                                      task_id, result.get("result")))
+                else:
+                    e_context["reply"] = Reply(ReplyType.TEXT, '❌ 获取任务图片seed失败\nℹ️ ' + result.get("description"))
+                e_context.action = EventAction.BREAK_PASS
+                return
             elif e_context["context"].type == ContextType.IMAGE:
                 cmd = self.cmd_dict.get(msg.actual_user_id)
                 if not cmd:
@@ -147,15 +159,19 @@ class Midjourney(Plugin):
     def get_task(self, task_id):
         return requests.get(url=self.proxy_server + '/task/%s/fetch' % task_id,
                             headers={'mj-api-secret': self.proxy_api_secret}).json()
+    
+    def get_task_image_seed(self, task_id):
+        return requests.get(url=self.proxy_server + '/task/%s/image-seed' % task_id,
+                        headers={'mj-api-secret': self.proxy_api_secret}).json()
 
     def add_task(self, task_id):
         self.task_id_dict[task_id] = 'NOT_START'
 
     def query_task_result(self):
         task_ids = list(self.task_id_dict.keys())
-        logger.info("[Midjourney] handle task , size [%s]", len(task_ids))
         if len(task_ids) == 0:
             return
+        logger.info("[Midjourney] handle task , size [%s]", len(task_ids))
         tasks = self.post_json('/task/list-by-condition', {'ids': task_ids})
         for task in tasks:
             task_id = task['id']
@@ -195,14 +211,6 @@ class Midjourney(Plugin):
                     image_storage = self.download_and_compress_image(task['imageUrl'])
                     url_reply = Reply(ReplyType.IMAGE, image_storage)
                     self.channel.send(url_reply, context)
-                    self.channel.send(reply, context)
-            elif status == 'MODAL':
-                res = self.post_json('/submit/modal', {'taskId': task_id})
-                if res.get("code") != 1:
-                    self.task_id_dict.pop(task_id)
-                    reply = Reply(ReplyType.TEXT,
-                                  reply_prefix + '❌ 任务执行失败\n✨ %s\n📨 任务ID: %s\n📒 失败原因: %s' % (
-                                  description, task_id, res.get("description")))
                     self.channel.send(reply, context)
             elif status == 'FAILURE':
                 self.task_id_dict.pop(task_id)
@@ -255,4 +263,5 @@ class Midjourney(Plugin):
         help_text += "/up 任务ID 序号执行动作;\n"
         help_text += "/describe 图片转文字;\n"
         help_text += "/shorten 提示词分析;\n"
+        # help_text += "/seed 获取任务图片的seed值;\n"
         return help_text
