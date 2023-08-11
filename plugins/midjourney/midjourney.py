@@ -100,12 +100,14 @@ class Midjourney(Plugin):
             elif content.startswith("/shorten "):
                 result = self.handle_shorten(content[9:], state)
             elif content.startswith("/seed "):
-                result = self.get_task_image_seed(content[6:])
+                task_id = content[6:]
+                result = self.get_task_image_seed(task_id)
                 if result.get("code") == 1:
-                    e_context["reply"] = Reply(ReplyType.TEXT, '✅ 获取任务图片seed成功\n📨 任务ID: %s\n🔖 seed值: ' % (
+                    e_context["reply"] = Reply(ReplyType.TEXT, '✅ 获取任务图片seed成功\n📨 任务ID: %s\n🔖 seed值: %s' % (
                                       task_id, result.get("result")))
                 else:
-                    e_context["reply"] = Reply(ReplyType.TEXT, '❌ 获取任务图片seed失败\nℹ️ ' + result.get("description"))
+                    e_context["reply"] = Reply(ReplyType.TEXT, '❌ 获取任务图片seed失败\n📨 任务ID: %s\nℹ️ %s' % (
+                                      task_id, result.get("description")))
                 e_context.action = EventAction.BREAK_PASS
                 return
             elif e_context["context"].type == ContextType.IMAGE:
@@ -263,5 +265,5 @@ class Midjourney(Plugin):
         help_text += "/up 任务ID 序号执行动作;\n"
         help_text += "/describe 图片转文字;\n"
         help_text += "/shorten 提示词分析;\n"
-        # help_text += "/seed 获取任务图片的seed值;\n"
+        help_text += "/seed 获取任务图片的seed值;\n"
         return help_text
